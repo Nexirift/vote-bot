@@ -70,6 +70,7 @@ ${message.content}
         const discordEmojis = message.content.match(discordEmojiRegex) || [];
         const unicodeEmojis = message.content.match(unicodeEmojiRegex) || [];
         const allEmojis = [...discordEmojis, ...unicodeEmojis];
+        console.log(allEmojis);
         await Promise.all(allEmojis.map((emoji) => message.react(emoji)));
       }
     } catch (error) {
