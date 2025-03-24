@@ -11,4 +11,4 @@ Nexirift's Discord bot that automatically reacts on ideas.
 
 ## How it works
 
-It looks for messages that begin with `---IDEA---` and reacts to them with checkbox and x emojis.
+It looks for messages that begin with `---IDEA---` and reacts to them with checkbox and x emojis. Alternatively, it also looks for messages that begin with `---QUESTION---` and reacts to them with emojis that match emojis in the message.
