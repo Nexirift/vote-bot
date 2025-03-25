@@ -109,7 +109,7 @@ client.on(Events.MessageCreate, async (message) => {
 
     await handleReactions(message, isIdea);
     await message.startThread({
-      name: `Discuss this ${type}`,
+      name: `Discuss this ${type}!`,
     });
   } catch (error) {
     console.error("Error processing message:", error);
