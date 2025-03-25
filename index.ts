@@ -1,9 +1,10 @@
+import type { EmojiResolvable, GuildEmoji } from "discord.js";
 import { Client, Events, GatewayIntentBits, Message } from "discord.js";
 import emojiRegex from "emoji-regex";
 
 const IDEA_PREFIX = "---IDEA---";
 const QUESTION_PREFIX = "---QUESTION---";
-const DEFAULT_REACTIONS = ["✅", "❌"] as const;
+const DEFAULT_REACTIONS = ["✅", "❌"] as EmojiResolvable[];
 const DISCORD_EMOJI_REGEX = /<:.+?:\d+>/g;
 
 const client = new Client({
@@ -20,18 +21,27 @@ const parseChannelConfig = (config: string): Record<string, string[]> => {
   return config
     .split(";")
     .reduce<Record<string, string[]>>((acc, serverDef) => {
-      const [serverId, channelIds] = serverDef.split(":").map((s) => s.trim());
-      if (serverId && channelIds) {
-        acc[serverId] = channelIds
-          .split(",")
-          .map((id) => id.trim())
-          .filter(Boolean);
-      }
+      const [serverId, channelIds] = serverDef.split(":");
+      if (!serverId?.trim() || !channelIds?.trim()) return acc;
+
+      acc[serverId.trim()] = channelIds
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
       return acc;
     }, {});
 };
 
 const channelsByServer = parseChannelConfig(Bun.env.SERVER_CHANNELS || "");
+
+const addReactions = async (
+  message: Message,
+  reactions: EmojiResolvable[],
+): Promise<void> => {
+  await Promise.allSettled(
+    reactions.map((reaction) => message.react(reaction)),
+  );
+};
 
 const handleReactions = async (
   message: Message,
@@ -39,26 +49,28 @@ const handleReactions = async (
 ): Promise<void> => {
   try {
     if (isIdea) {
-      await Promise.all(
-        DEFAULT_REACTIONS.map((reaction) => message.react(reaction)),
-      );
+      await addReactions(message, DEFAULT_REACTIONS);
       return;
     }
 
     const unicodeEmojiRegex = emojiRegex();
     const discordEmojis = message.content.match(DISCORD_EMOJI_REGEX) || [];
-    const unicodeEmojis = message.content.match(unicodeEmojiRegex) || [];
+    const unicodeEmojis = Array.from(
+      message.content.matchAll(unicodeEmojiRegex),
+    ).map((m) => m[0]);
 
-    const reactionPromises = [
-      ...unicodeEmojis.map((emoji) => message.react(emoji)),
-      ...discordEmojis.map((emoji) => {
-        const emojiId = emoji.split(":")[2]?.slice(0, -1);
-        const discordEmoji = client.emojis.cache.get(emojiId!);
-        return message.react(discordEmoji!);
-      }),
+    const reactions = [
+      ...unicodeEmojis,
+      ...discordEmojis
+        .map((emoji) => {
+          const emojiId = emoji.split(":")[2]?.slice(0, -1);
+          const guildEmoji = client.emojis.cache.get(emojiId!);
+          return guildEmoji ? guildEmoji : undefined;
+        })
+        .filter((emoji): emoji is GuildEmoji => emoji !== undefined),
     ];
 
-    await Promise.all(reactionPromises);
+    await addReactions(message, reactions);
   } catch (error) {
     console.error("Failed to add reactions:", error);
   }
@@ -90,13 +102,15 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    const type = isIdea ? "idea" : "question";
     console.log(
-      `New ${isIdea ? "idea" : "question"} received in server ${message.guildId}, channel ${message.channel.id}:
-${message.content}
-`,
+      `New ${type} received in server ${message.guildId}, channel ${message.channel.id}:\n${message.content}\n`,
     );
 
     await handleReactions(message, isIdea);
+    await message.startThread({
+      name: `Discuss this ${type}`,
+    });
   } catch (error) {
     console.error("Error processing message:", error);
   }
